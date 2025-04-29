@@ -5,7 +5,8 @@
 
 ## 📚 프로젝트 문서 (WIKI)
 > 현재 MOA의 **일정, 설계, 기능 정의 등 주요 문서**는 Wiki에서 관리하고 있습니다.  
-- [🔗 MOA WIKI 바로가기](https://github.com/100-hours-a-week/4-bull4zo-wiki/wiki)<br/>
+- [🔗 팀 WIKI 바로가기](https://github.com/100-hours-a-week/4-bull4zo-wiki/wiki)<br/>
+- [🔗 백엔드 WIKI 바로가기](https://github.com/100-hours-a-week/4-bull4zo-wiki/wiki/Backend-Wiki)<br/>
 <br/>
 
 ## 📌 칸반 보드 (Project)
