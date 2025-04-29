@@ -1,0 +1,31 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL}?serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+
+kakao:
+  client-id: ${KAKAO_CLIENT_ID}
+  redirect-uri: ${FRONTEND_URL}/auth/callback
+  admin-key: ${KAKAO_ADMIN_KEY}
+
+frontend:
+  url: ${FRONTEND_URL}
+
+ai:
+  server-url: ${AI_SERVER_URL}
+mock:
+  ai:
+    enabled: false
+
+logging:
+  level:
+    root: INFO
+    org.springframework.security: DEBUG
