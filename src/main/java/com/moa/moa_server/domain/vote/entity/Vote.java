@@ -41,6 +41,10 @@ public class Vote extends BaseTimeEntity {
     @Column(name = "closed_at", nullable = false)
     private LocalDateTime closedAt;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean anonymous = false;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "vote_status", nullable = false, length = 20)
     @Builder.Default
@@ -68,5 +72,21 @@ public class Vote extends BaseTimeEntity {
 
     public enum VoteType {
         USER, AI, EVENT
+    }
+
+    public static Vote createUserVote(User user, Group group, String content, String imageUrl,
+                                      LocalDateTime closedAt, boolean adminVote) {
+        return Vote.builder()
+                .user(user)
+                .group(group)
+                .content(content)
+                .imageUrl(imageUrl)
+                .closedAt(closedAt)
+                .anonymous(false) // TODO: 익명 기능 추가 시, 요청값으로 변경
+                .voteStatus(VoteStatus.OPEN) // TODO: 투표 검열 기능 추가 시, PENDING 으로 변경
+                .adminVote(adminVote)
+                .voteType(VoteType.USER)
+                .lastAnonymousNumber(0)
+                .build();
     }
 }

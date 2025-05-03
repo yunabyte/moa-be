@@ -1,10 +1,10 @@
-package com.moa.moa_server.domain.user.handler;
+package com.moa.moa_server.domain.vote.handler;
 
 import com.moa.moa_server.domain.global.exception.BaseErrorCode;
 import com.moa.moa_server.domain.global.exception.BaseException;
 
-public class UserException extends BaseException {
-    public UserException(BaseErrorCode errorCode) {
+public class VoteException extends BaseException {
+    public VoteException(BaseErrorCode errorCode) {
         super(errorCode);
     }
 }
