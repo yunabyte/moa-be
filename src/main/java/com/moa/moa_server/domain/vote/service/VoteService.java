@@ -12,6 +12,8 @@ import com.moa.moa_server.domain.user.util.AuthUserValidator;
 import com.moa.moa_server.domain.vote.dto.request.VoteCreateRequest;
 import com.moa.moa_server.domain.vote.dto.request.VoteSubmitRequest;
 import com.moa.moa_server.domain.vote.dto.response.VoteDetailResponse;
+import com.moa.moa_server.domain.vote.dto.response.VoteOptionResult;
+import com.moa.moa_server.domain.vote.dto.response.VoteResultResponse;
 import com.moa.moa_server.domain.vote.entity.Vote;
 import com.moa.moa_server.domain.vote.entity.VoteResponse;
 import com.moa.moa_server.domain.vote.handler.VoteErrorCode;
@@ -23,6 +25,11 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -75,30 +82,6 @@ public class VoteService {
     }
 
     @Transactional
-    public VoteDetailResponse getVoteDetail(Long userId, Long voteId) {
-        // 유저 조회 및 유효성 검사
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
-        AuthUserValidator.validateActive(user);
-
-        // 투표 조회
-        Vote vote = findVoteOrThrow(voteId);
-
-        // 접근 권한 확인
-        validateGroupAccess(user, vote);
-
-        return new VoteDetailResponse(
-                vote.getId(),
-                vote.getGroup().getId(),
-                vote.getUser().getNickname(),
-                vote.getContent(),
-                vote.getImageUrl(),
-                vote.getCreatedAt(),
-                vote.getClosedAt()
-        );
-    }
-
-    @Transactional
     public void submitVote(Long userId, Long voteId, VoteSubmitRequest request) {
         // 유저 조회 및 유효성 검사
         User user = userRepository.findById(userId)
@@ -146,6 +129,79 @@ public class VoteService {
         }
     }
 
+    @Transactional
+    public VoteDetailResponse getVoteDetail(Long userId, Long voteId) {
+        // 유저 조회 및 유효성 검사
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
+        AuthUserValidator.validateActive(user);
+
+        // 투표 조회
+        Vote vote = findVoteOrThrow(voteId);
+
+        // 상태/권한 검사
+        validateVoteReadable(vote);
+        validateVoteAccess(user, vote);
+
+        return new VoteDetailResponse(
+                vote.getId(),
+                vote.getGroup().getId(),
+                vote.getUser().getNickname(),
+                vote.getContent(),
+                vote.getImageUrl(),
+                vote.getCreatedAt(),
+                vote.getClosedAt()
+        );
+    }
+
+    @Transactional
+    public VoteResultResponse getVoteResult(Long userId, Long voteId) {
+        // 유저 조회 및 유효성 검사
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
+        AuthUserValidator.validateActive(user);
+
+        // 투표 조회
+        Vote vote = findVoteOrThrow(voteId);
+
+        // 상태/권한 검사
+        validateVoteReadable(vote);
+        validateVoteAccess(user, vote);
+
+        // 사용자 응답 조회 (없으면 null)
+        Optional<VoteResponse> userVoteResponse = voteResponseRepository.findByVoteAndUser(vote, user);
+        Integer userResponse = userVoteResponse.map(VoteResponse::getOptionNumber).orElse(null);
+
+        // 전체 응답 조회
+        List<VoteResponse> responses = voteResponseRepository.findAllByVote(vote);
+        int totalCount = (int) responses.stream()
+                .filter(vr -> vr.getOptionNumber() > 0)
+                .count();
+
+        // 항목별 집계 (0: 기권 제외)
+        Map<Integer, Long> countMap = responses.stream()
+                .filter(vr -> vr.getOptionNumber() > 0)
+                .collect(Collectors.groupingBy(
+                        VoteResponse::getOptionNumber,
+                        Collectors.counting()
+                ));
+
+        List<VoteOptionResult> results = List.of(1, 2).stream()
+                .map(option -> {
+                    int count = countMap.getOrDefault(option, 0L).intValue();
+                    int ratio = totalCount == 0 ? 0 : (int) ((count * 100.0) / totalCount);
+                    return new VoteOptionResult(option, count, ratio);
+                })
+                .collect(Collectors.toList());
+
+        return new VoteResultResponse(
+                voteId,
+                userResponse,
+                totalCount,
+                results
+        );
+    }
+
     /**
      * 투표 조회
      */
@@ -167,13 +223,24 @@ public class VoteService {
     }
 
     /**
-     * 그룹 조회 권한 검사 (읽기 접근에 사용)
+     * 투표 조회 가능한 상태인지 검사 (내용, 결과, 댓글 읽기)
+     * 허용 상태: OPEN, CLOSED
      */
-    private void validateGroupAccess(User user, Vote vote) {
-        if (vote.getGroup().isPublicGroup()) return;
+    private void validateVoteReadable(Vote vote) {
+        if (vote.getVoteStatus() != Vote.VoteStatus.OPEN &&
+                vote.getVoteStatus() != Vote.VoteStatus.CLOSED) {
+            throw new VoteException(VoteErrorCode.FORBIDDEN);
+        }
+    }
 
+    /**
+     * 투표 조회 권한 검사 (내용, 결과, 댓글 읽기)
+     * 조건: 등록자이거나 참여자(기권 불가)여야 함
+     * * top3 투표는 추후 그룹 멤버 여부로도 허용 예정
+     */
+    private void validateVoteAccess(User user, Vote vote) {
         if (isVoteAuthor(user, vote)) return;
-        if (hasParticipated(user, vote)) return;
+        if (hasParticipatedWithValidOption(user, vote)) return;
 
         // TODO: top3 투표일 경우 isGroupMember 검사 후 허용
         throw new VoteException(VoteErrorCode.FORBIDDEN);
@@ -183,7 +250,9 @@ public class VoteService {
         return vote.getUser().equals(user);
     }
 
-    private boolean hasParticipated(User user, Vote vote) {
-        return voteResponseRepository.existsByVoteAndUser(vote, user);
+    private boolean hasParticipatedWithValidOption(User user, Vote vote) {
+        return voteResponseRepository.findByVoteAndUser(vote, user)
+                .map(vr -> vr.getOptionNumber() > 0)
+                .orElse(false);
     }
 }
