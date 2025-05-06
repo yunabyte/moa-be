@@ -29,7 +29,7 @@ public class Group extends BaseTimeEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "name", length = 50, nullable = false)
+    @Column(name = "name", length = 50, nullable = false, unique = true)
     private String name;
 
     @Column(name = "description", length = 100, nullable = false)
@@ -44,11 +44,12 @@ public class Group extends BaseTimeEntity {
     @Column(name = "deleted_at")
     private java.time.LocalDateTime deletedAt;
 
-    public static Group create(User user, String name, String description, String inviteCode) {
+    public static Group create(User user, String name, String description, String imageUrl, String inviteCode) {
         return Group.builder()
                 .user(user)
                 .name(name)
                 .description(description)
+                .imageUrl(imageUrl)
                 .inviteCode(inviteCode)
                 .build();
     }

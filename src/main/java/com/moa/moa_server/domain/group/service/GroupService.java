@@ -1,6 +1,8 @@
 package com.moa.moa_server.domain.group.service;
 
+import com.moa.moa_server.domain.group.dto.request.GroupCreateRequest;
 import com.moa.moa_server.domain.group.dto.request.GroupJoinRequest;
+import com.moa.moa_server.domain.group.dto.response.GroupCreateResponse;
 import com.moa.moa_server.domain.group.dto.response.GroupJoinResponse;
 import com.moa.moa_server.domain.group.entity.Group;
 import com.moa.moa_server.domain.group.entity.GroupMember;
@@ -17,6 +19,7 @@ import com.moa.moa_server.domain.user.util.AuthUserValidator;
 import com.moa.moa_server.domain.vote.handler.VoteErrorCode;
 import com.moa.moa_server.domain.vote.handler.VoteException;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +28,8 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 public class GroupService {
+
+    private static final int MAX_INVITE_CODE_RETRY = 10;
 
     private final GroupRepository groupRepository;
     private final UserRepository userRepository;
@@ -77,5 +82,56 @@ public class GroupService {
         }
 
         return new GroupJoinResponse(group.getId(), group.getName(), member.getRole().name());
+    }
+
+    @Transactional
+    public GroupCreateResponse createGroup(Long userId, GroupCreateRequest request) {
+        // 유저 조회 및 검증
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
+        AuthUserValidator.validateActive(user);
+
+        // 입력 검증
+        GroupValidator.validateGroupName(request.name());
+        GroupValidator.validateDescription(request.description());
+        if (!request.imageUrl().isBlank()) {
+            GroupValidator.validateImageUrl(request.imageUrl()); // 업로드 도메인 검증
+        }
+        String imageUrl = request.imageUrl().isBlank() ? null : request.imageUrl().trim();
+
+        // 그룹 이름 중복 검사
+        if (groupRepository.existsByName(request.name())) {
+            throw new GroupException(GroupErrorCode.DUPLICATE_NAME);
+        }
+
+        // 초대 코드 생성
+        String inviteCode = generateUniqueInviteCode();
+
+        // 그룹 생성
+        Group group = Group.create(user, request.name(), request.description(), imageUrl, inviteCode);
+        groupRepository.save(group);
+
+        // 그룹 멤버 등록
+        GroupMember member = GroupMember.createAsOwner(user, group);
+        groupMemberRepository.save(member);
+
+        return new GroupCreateResponse(
+                group.getId(),
+                group.getName(),
+                group.getDescription(),
+                group.getImageUrl(),
+                group.getInviteCode(),
+                group.getCreatedAt()
+        );
+    }
+
+    private String generateUniqueInviteCode() {
+        for (int i = 0; i < MAX_INVITE_CODE_RETRY; i++) {
+            String code = RandomStringUtils.randomAlphanumeric(6, 8).toUpperCase();
+            if (!groupRepository.existsByInviteCode(code)) {
+                return code;
+            }
+        }
+        throw new GroupException(GroupErrorCode.INVITE_CODE_GENERATION_FAILED);
     }
 }
