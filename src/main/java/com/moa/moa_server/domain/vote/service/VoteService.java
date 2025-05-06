@@ -1,10 +1,12 @@
 package com.moa.moa_server.domain.vote.service;
 
+import com.moa.moa_server.domain.global.cursor.CreatedAtVoteIdCursor;
 import com.moa.moa_server.domain.global.cursor.VoteClosedCursor;
 import com.moa.moa_server.domain.group.entity.Group;
 import com.moa.moa_server.domain.group.entity.GroupMember;
 import com.moa.moa_server.domain.group.repository.GroupMemberRepository;
 import com.moa.moa_server.domain.group.repository.GroupRepository;
+import com.moa.moa_server.domain.group.service.GroupService;
 import com.moa.moa_server.domain.user.entity.User;
 import com.moa.moa_server.domain.user.handler.UserErrorCode;
 import com.moa.moa_server.domain.user.handler.UserException;
@@ -13,8 +15,10 @@ import com.moa.moa_server.domain.user.util.AuthUserValidator;
 import com.moa.moa_server.domain.vote.dto.request.VoteCreateRequest;
 import com.moa.moa_server.domain.vote.dto.request.VoteSubmitRequest;
 import com.moa.moa_server.domain.vote.dto.response.VoteDetailResponse;
-import com.moa.moa_server.domain.vote.dto.response.list.VoteListItem;
-import com.moa.moa_server.domain.vote.dto.response.list.VoteListResponse;
+import com.moa.moa_server.domain.vote.dto.response.active.ActiveVoteItem;
+import com.moa.moa_server.domain.vote.dto.response.active.ActiveVoteResponse;
+import com.moa.moa_server.domain.vote.dto.response.mine.MyVoteItem;
+import com.moa.moa_server.domain.vote.dto.response.mine.MyVoteResponse;
 import com.moa.moa_server.domain.vote.dto.response.result.VoteOptionResult;
 import com.moa.moa_server.domain.vote.dto.response.result.VoteResultResponse;
 import com.moa.moa_server.domain.vote.entity.Vote;
@@ -22,7 +26,6 @@ import com.moa.moa_server.domain.vote.entity.VoteResponse;
 import com.moa.moa_server.domain.vote.handler.VoteErrorCode;
 import com.moa.moa_server.domain.vote.handler.VoteException;
 import com.moa.moa_server.domain.vote.repository.VoteRepository;
-import com.moa.moa_server.domain.vote.repository.VoteRepositoryCustom;
 import com.moa.moa_server.domain.vote.repository.VoteResponseRepository;
 import com.moa.moa_server.domain.vote.util.VoteValidator;
 import jakarta.annotation.Nullable;
@@ -49,6 +52,9 @@ public class VoteService {
     private final GroupRepository groupRepository;
     private final GroupMemberRepository groupMemberRepository;
     private final VoteResponseRepository voteResponseRepository;
+
+    private final GroupService groupService;
+    private final VoteResultService voteResultService;
 
     @Transactional
     public Long createVote(Long userId, VoteCreateRequest request) {
@@ -181,27 +187,14 @@ public class VoteService {
         Optional<VoteResponse> userVoteResponse = voteResponseRepository.findByVoteAndUser(vote, user);
         Integer userResponse = userVoteResponse.map(VoteResponse::getOptionNumber).orElse(null);
 
-        // 전체 응답 조회
+        // 전체 참여자 수 계산
         List<VoteResponse> responses = voteResponseRepository.findAllByVote(vote);
         int totalCount = (int) responses.stream()
                 .filter(vr -> vr.getOptionNumber() > 0)
                 .count();
 
-        // 항목별 집계 (0: 기권 제외)
-        Map<Integer, Long> countMap = responses.stream()
-                .filter(vr -> vr.getOptionNumber() > 0)
-                .collect(Collectors.groupingBy(
-                        VoteResponse::getOptionNumber,
-                        Collectors.counting()
-                ));
-
-        List<VoteOptionResult> results = List.of(1, 2).stream()
-                .map(option -> {
-                    int count = countMap.getOrDefault(option, 0L).intValue();
-                    int ratio = totalCount == 0 ? 0 : (int) ((count * 100.0) / totalCount);
-                    return new VoteOptionResult(option, count, ratio);
-                })
-                .collect(Collectors.toList());
+        // 결과 조회
+        List<VoteOptionResult> results = voteResultService.getResults(vote);
 
         return new VoteResultResponse(
                 voteId,
@@ -212,14 +205,14 @@ public class VoteService {
     }
 
     @Transactional(readOnly = true)
-    public VoteListResponse getActiveVotes(@Nullable Long userId, @Nullable Integer groupId, @Nullable String cursor, @Nullable Integer size) {
+    public ActiveVoteResponse getActiveVotes(@Nullable Long userId, @Nullable Long groupId, @Nullable String cursor, @Nullable Integer size) {
         int pageSize = (size == null || size <= 0) ? DEFAULT_PAGE_SIZE : size;
         VoteClosedCursor parsedCursor = cursor != null ? VoteClosedCursor.parse(cursor) : null;
 
         // 비로그인 요청
         if (userId == null) {
             // 공개 그룹만 허용 (groupId가 1이 아닌 경우 거절)
-            Long targetGroupId = (groupId != null) ? groupId.longValue() : 1L;
+            Long targetGroupId = (groupId != null) ? groupId : 1L;
             Group group = groupRepository.findById(targetGroupId)
                     .orElseThrow(() -> new VoteException(VoteErrorCode.GROUP_NOT_FOUND));
             if (!group.isPublicGroup()) {
@@ -228,8 +221,8 @@ public class VoteService {
 
             List<Vote> votes = voteRepository.findActiveVotes(
                     List.of(group), parsedCursor, null, DEFAULT_UNAUTHENTICATED_PAGE_SIZE);
-            List<VoteListItem> items = votes.stream().map(VoteListItem::from).toList();
-            return new VoteListResponse(items, null, false, items.size());
+            List<ActiveVoteItem> items = votes.stream().map(ActiveVoteItem::from).toList();
+            return new ActiveVoteResponse(items, null, false, items.size());
         }
         // 로그인 사용자 요청
         else {
@@ -251,9 +244,59 @@ public class VoteService {
             String nextCursor = votes.isEmpty() ? null :
                     new VoteClosedCursor(votes.getLast().getClosedAt(), votes.getLast().getCreatedAt()).encode();
 
-            List<VoteListItem> items = votes.stream().map(VoteListItem::from).toList();
-            return new VoteListResponse(items, nextCursor, hasNext, items.size());
+            List<ActiveVoteItem> items = votes.stream().map(ActiveVoteItem::from).toList();
+            return new ActiveVoteResponse(items, nextCursor, hasNext, items.size());
         }
+    }
+
+    @Transactional(readOnly = true)
+    public MyVoteResponse getMyVotes(Long userId, @Nullable Long groupId, @Nullable String cursor, @Nullable Integer size) {
+        int pageSize = (size == null || size <= 0) ? DEFAULT_PAGE_SIZE : size;
+        CreatedAtVoteIdCursor parsedCursor = cursor != null ? CreatedAtVoteIdCursor.parse(cursor) : null;
+        if (cursor != null && !voteRepository.existsById(parsedCursor.voteId())) {
+            throw new VoteException(VoteErrorCode.VOTE_NOT_FOUND);
+        }
+
+        // 유저 조회 및 검증
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
+        AuthUserValidator.validateActive(user);
+
+        // 조회 대상 그룹 목록 수집
+        List<Group> groups;
+        if (groupId != null) {
+            // 특정 그룹이 지정된 경우
+            Group group = groupRepository.findById(groupId)
+                    .orElseThrow(() -> new VoteException(VoteErrorCode.GROUP_NOT_FOUND));
+            groups = List.of(group);
+        } else {
+            // 전체 그룹 조회: 유저가 속한 그룹 + 공개 그룹
+            groups = groupMemberRepository.findAllActiveGroupsByUser(user);
+
+            Group publicGroup = groupService.getPublicGroup();
+            if (!groups.contains(publicGroup)) {
+                groups.add(publicGroup);
+            }
+        }
+
+        // 사용자가 생성한 투표 목록 조회
+        List<Vote> votes = voteRepository.findMyVotes(user, groups, parsedCursor, pageSize + 1);
+
+        // 응답 구성
+        boolean hasNext = votes.size() > pageSize;
+        if (hasNext) votes = votes.subList(0, pageSize);
+
+        String nextCursor = votes.isEmpty() ? null :
+                new CreatedAtVoteIdCursor(votes.getLast().getCreatedAt(), votes.getLast().getId()).encode();
+
+        // 각 투표별 집계 결과를 포함한 응답 DTO 구성
+        List<MyVoteItem> items = votes.stream()
+                .map(vote -> {
+                    var results = voteResultService.getResultsWithVoteId(vote);
+                    return MyVoteItem.from(vote, results);
+                })
+                .toList();
+        return new MyVoteResponse(items, nextCursor, hasNext, items.size());
     }
 
     /**
@@ -315,10 +358,10 @@ public class VoteService {
      * - groupId가 지정된 경우: 해당 그룹만 조회 (권한 확인 포함)
      * - groupId가 없는 경우: 공개 그룹 + 사용자가 속한 모든 그룹 반환
      */
-    public List<Group> getAccessibleGroups(User user, @Nullable Integer groupId) {
+    public List<Group> getAccessibleGroups(User user, @Nullable Long groupId) {
         if (groupId != null) {
             // 단일 그룹만 조회 (권한 확인 포함)
-            Group group = groupRepository.findById(groupId.longValue())
+            Group group = groupRepository.findById(groupId)
                     .orElseThrow(() -> new VoteException(VoteErrorCode.GROUP_NOT_FOUND));
 
             if (!group.isPublicGroup()) {
@@ -331,8 +374,7 @@ public class VoteService {
         }
 
         // 전체 그룹 조회: 공개 그룹 + 사용자의 그룹
-        Group publicGroup = groupRepository.findById(1L)
-                .orElseThrow(() -> new VoteException(VoteErrorCode.GROUP_NOT_FOUND));
+        Group publicGroup = groupService.getPublicGroup();
         List<Group> userGroups = groupMemberRepository.findAllActiveGroupsByUser(user);
 
         return Stream.concat(Stream.of(publicGroup), userGroups.stream()).distinct().toList();
