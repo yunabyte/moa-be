@@ -60,7 +60,7 @@ public class DevSecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        config.setAllowedOriginPatterns(List.of(frontendUrl)); // 요청을 허용할 출처(origin) 패턴을 설정
+        config.setAllowedOriginPatterns(List.of(frontendUrl, "http://localhost:5173")); // 요청을 허용할 출처(origin) 패턴을 설정
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")); // 허용할 HTTP 메서드 목록 지정
         config.setAllowedHeaders(List.of("*")); // 모든 요청 헤더 허용
         config.setAllowCredentials(true); // 인증 정보를 포함한 요청(Cookie 등)을 허용
