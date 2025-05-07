@@ -58,6 +58,7 @@ jobs:
           FRONTEND_URL=${{ secrets.FRONTEND_URL }}
           AI_SERVER_URL=${{ secrets.AI_SERVER_URL }}
           KAKAO_CLIENT_ID=${{ secrets.KAKAO_CLIENT_ID }}
+          KAKAO_ADMIN_KEY=${{ secrets.KAKAO_ADMIN_KEY }}
           EENV
             sudo chmod 600 /home/cicd/moa-backend.env
             sudo chown cicd:cicd /home/cicd/moa-backend.env
