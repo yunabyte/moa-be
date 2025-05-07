@@ -1,5 +1,11 @@
 package com.moa.moa_server.domain.user.service;
 
+import com.moa.moa_server.domain.auth.entity.OAuth;
+import com.moa.moa_server.domain.auth.handler.AuthErrorCode;
+import com.moa.moa_server.domain.auth.handler.AuthException;
+import com.moa.moa_server.domain.auth.repository.OAuthRepository;
+import com.moa.moa_server.domain.auth.repository.TokenRepository;
+import com.moa.moa_server.domain.auth.service.AuthService;
 import com.moa.moa_server.domain.global.cursor.GroupNameGroupIdCursor;
 import com.moa.moa_server.domain.group.entity.Group;
 import com.moa.moa_server.domain.group.entity.GroupMember;
@@ -13,6 +19,7 @@ import com.moa.moa_server.domain.user.handler.UserException;
 import com.moa.moa_server.domain.user.repository.UserRepository;
 import com.moa.moa_server.domain.user.util.AuthUserValidator;
 import com.moa.moa_server.domain.user.util.UserValidator;
+import com.moa.moa_server.domain.vote.repository.VoteRepository;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -30,8 +37,12 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final GroupMemberRepository groupMemberRepository;
+    private final OAuthRepository oauthRepository;
+    private final TokenRepository tokenRepository;
+    private final VoteRepository voteRepository;
 
     private final GroupService groupService;
+    private final AuthService authService;
 
     @Transactional(readOnly = true)
     public GroupLabelResponse getJoinedGroupLabels(Long userId, @Nullable String cursor, @Nullable Integer size) {
@@ -129,5 +140,35 @@ public class UserService {
         // 닉네임 변경
         user.updateNickname(newNickname);
         return new UserUpdateResponse(newNickname);
+    }
+
+    @Transactional
+    public void deleteUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
+        AuthUserValidator.validateActive(user);
+
+        // 1. 그룹 소유자 승계
+        groupService.reassignOrDeleteGroupsOwnedBy(user);
+
+        // 2. 그룹 멤버 삭제 (hard delete)
+        groupMemberRepository.hardDeleteAllByUserId(userId);
+
+        // 3. 유저가 생성한 투표 삭제 (soft delete)
+        voteRepository.softDeleteAllByUser(user);
+
+        // 4. 카카오 연동 해제
+        Long kakaoUserId = oauthRepository.findByUser(user)
+                .filter(oauth -> oauth.getProviderCode() == OAuth.ProviderCode.KAKAO)
+                .map(OAuth::getId)
+                .orElseThrow(() -> new AuthException(AuthErrorCode.OAUTH_NOT_FOUND));
+        authService.unlinkKakaoAccount(kakaoUserId);
+
+        // 5. 토큰, OAuth 삭제 (hard delete)
+        tokenRepository.deleteByUserId(userId);
+        oauthRepository.deleteByUserId(userId);
+
+        // 6. 회원 상태 변경 (soft delete)
+        user.withdraw();
     }
 }

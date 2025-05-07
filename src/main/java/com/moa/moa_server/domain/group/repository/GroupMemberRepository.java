@@ -4,6 +4,7 @@ import com.moa.moa_server.domain.group.entity.Group;
 import com.moa.moa_server.domain.group.entity.GroupMember;
 import com.moa.moa_server.domain.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -21,4 +22,12 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long>,
 
     @Query("SELECT gm.group FROM GroupMember gm WHERE gm.user = :user AND gm.deletedAt IS NULL")
     List<Group> findAllActiveGroupsByUser(@Param("user") User user);
+
+    void deleteAllByUserId(Long userId);
+
+    @Modifying
+    @Query("DELETE FROM GroupMember gm WHERE gm.user.id = :userId")
+    void hardDeleteAllByUserId(@Param("userId") Long userId);
+
+    List<GroupMember> findAllByGroupOrderByJoinedAtAsc(Group group);
 }
