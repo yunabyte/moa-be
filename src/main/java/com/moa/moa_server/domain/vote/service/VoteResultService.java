@@ -54,12 +54,12 @@ public class VoteResultService {
         return Stream.of(1,2)
                 .map(option -> {
                     int count = countMap.getOrDefault(option, 0L).intValue();
-                    int ratio = totalCount == 0 ? 0 : (int) ((count * 100.0) / totalCount);
+                    double ratio = totalCount == 0 ? 0.0 : (count * 100.0) / totalCount;
                     return new ResultRaw(option, count, ratio);
                 })
                 .toList();
     }
 
-    private record ResultRaw(int optionNumber, int count, int ratio) {}
+    private record ResultRaw(int optionNumber, int count, double ratio) {}
 
 }

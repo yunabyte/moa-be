@@ -4,5 +4,5 @@ public record VoteOptionResultWithId(
         Long voteId,
         int optionNumber,
         int count,
-        int ratio
+        double ratio
 ) {}
