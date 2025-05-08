@@ -24,6 +24,7 @@ public class AuthService {
     private static final Set<String> ALLOWED_REDIRECT_URIS = Set.of(
             "http://localhost:5173/auth/callback",
             "https://b4z.moagenda.com/auth/callback",
+            "https://moagenda.com/auth/callback",
             "http://localhost:8080/api/v1/auth/login/oauth"
     );
 
