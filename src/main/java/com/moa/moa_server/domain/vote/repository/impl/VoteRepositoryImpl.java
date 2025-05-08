@@ -97,6 +97,7 @@ public class VoteRepositoryImpl implements VoteRepositoryCustom {
 
         BooleanBuilder builder = new BooleanBuilder()
                 .and(voteResponse.user.eq(user))
+                .and(voteResponse.optionNumber.ne(0)) // 기권 제외
                 .and(vote.group.in(groups));
 
         if (cursor != null) {

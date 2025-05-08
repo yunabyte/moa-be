@@ -170,7 +170,8 @@ public class VoteService {
                 vote.getContent(),
                 vote.getImageUrl(),
                 vote.getCreatedAt(),
-                vote.getClosedAt()
+                vote.getClosedAt(),
+                vote.isAnonymous() ? 0 : (vote.isAdminVote() ? 1 : 0)
         );
     }
 
