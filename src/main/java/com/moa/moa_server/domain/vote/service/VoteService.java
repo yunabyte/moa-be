@@ -90,6 +90,7 @@ public class VoteService {
                 request.content(),
                 imageUrl,
                 request.closedAt(),
+                request.anonymous(),
                 adminVote
         );
 
@@ -162,7 +163,7 @@ public class VoteService {
         return new VoteDetailResponse(
                 vote.getId(),
                 vote.getGroup().getId(),
-                vote.getUser().getNickname(),
+                vote.isAnonymous() ? "익명" : vote.getUser().getNickname(),
                 vote.getContent(),
                 vote.getImageUrl(),
                 vote.getCreatedAt(),
