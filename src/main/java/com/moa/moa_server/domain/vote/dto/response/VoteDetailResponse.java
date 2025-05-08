@@ -9,5 +9,6 @@ public record VoteDetailResponse(
         String content,
         String imageUrl,
         LocalDateTime createdAt,
-        LocalDateTime closedAt
+        LocalDateTime closedAt,
+        int adminVote
 ) {}

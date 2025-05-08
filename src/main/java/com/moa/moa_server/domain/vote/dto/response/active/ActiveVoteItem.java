@@ -25,7 +25,7 @@ public record ActiveVoteItem(
                 vote.getImageUrl(),
                 vote.getCreatedAt(),
                 vote.getClosedAt(),
-                vote.isAdminVote() ? 1 : 0,
+                vote.isAnonymous() ? 0 : (vote.isAdminVote() ? 1 : 0),
                 vote.getVoteType().name()
         );
     }
