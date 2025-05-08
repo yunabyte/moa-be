@@ -83,7 +83,7 @@ public class Vote extends BaseTimeEntity {
                 .imageUrl(imageUrl)
                 .closedAt(closedAt)
                 .anonymous(anonymous)
-                .voteStatus(VoteStatus.OPEN) // TODO: 투표 검열 기능 추가 시, PENDING 으로 변경
+                .voteStatus(VoteStatus.PENDING)
                 .adminVote(adminVote)
                 .voteType(VoteType.USER)
                 .lastAnonymousNumber(0)
@@ -92,5 +92,9 @@ public class Vote extends BaseTimeEntity {
 
     public boolean isOpen() {
         return this.voteStatus == VoteStatus.OPEN;
+    }
+
+    public void updateModerationResult(VoteStatus voteStatus) {
+        this.voteStatus = voteStatus;
     }
 }
