@@ -30,10 +30,11 @@ public class VoteRepositoryImpl implements VoteRepositoryCustom {
         QVote vote = QVote.vote;
         QVoteResponse voteResponse = QVoteResponse.voteResponse;
 
-        // 조회하려는 그룹 조건
+        // 조회 조건
         BooleanBuilder builder = new BooleanBuilder()
                 .and(vote.group.in(accessibleGroups)) // 사용자가 접근 가능한 그룹의 투표만 조회
-                .and(vote.closedAt.gt(LocalDateTime.now())); // 진행 중인 투표만 조회
+                .and(vote.closedAt.gt(LocalDateTime.now())) // 진행 중인 투표만 조회 (시간으로 먼저 정확히 검사)
+                .and(vote.voteStatus.eq(Vote.VoteStatus.OPEN)); // OPEN 투표만 조회 (PENDING, REJECTED 필터링)
 
         // 커서 조건 (closedAt, createdAt 기준)
         if (cursor != null) {
