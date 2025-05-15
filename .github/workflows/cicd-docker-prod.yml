@@ -13,7 +13,7 @@ jobs:
     env:
       REGISTRY: ghcr.io
       REPO: ${{ github.repository }}
-      
+
     steps:
       - name: 🐵 Checkout Repository
         uses: actions/checkout@v3
@@ -36,9 +36,14 @@ jobs:
       - name: 🐵 Log in to GHCR
         run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+      - name: 🔍 Debug: show files
+        run: |
+          pwd
+          ls -al
+
       - name: 🐵 Build Docker Image
         run: |
-          docker build -t ${{ env.REGISTRY }}/${{ env.REPO }}:${{ github.sha }} .
+          docker build -f ./Dockerfile -t ${{ env.REGISTRY }}/${{ env.REPO }}:${{ github.sha }} .
           docker tag ${{ env.REGISTRY }}/${{ env.REPO }}:${{ github.sha }} ${{ env.REGISTRY }}/${{ env.REPO }}:latest
 
       - name: 🐵 Push to GHCR
