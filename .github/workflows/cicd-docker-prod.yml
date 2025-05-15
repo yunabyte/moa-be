@@ -10,6 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: prod
 
+    env:
+      REGISTRY: ghcr.io
+      REPO: ${{ github.repository }}
+      
     steps:
       - name: 🐵 Checkout Repository
         uses: actions/checkout@v3
@@ -30,7 +34,7 @@ jobs:
           echo "✅ Build completed successfully!"
 
       - name: 🐵 Log in to GHCR
-        run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+        run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: 🐵 Build Docker Image
         run: |
@@ -42,8 +46,6 @@ jobs:
           docker push ${{ env.REGISTRY }}/${{ env.REPO }}:${{ github.sha }}
           docker push ${{ env.REGISTRY }}/${{ env.REPO }}:latest
 
-
-
       - name: 🐵 Save SSH Key
         run: |
           echo "🐵 Saving SSH key..."
@@ -51,22 +53,17 @@ jobs:
           chmod 600 key.pem
           echo "✅ SSH key saved!"
 
-          # 여기까지 진행 완료
-
-          
-      - name: 🐵 Deploy to GCP VM
+      - name: 🐵 Deploy to GCP VM (Dockerized)
         run: |
-          echo "🐵 Sending JAR to GCP..."
+          echo "🐵 Writing .env and restarting Docker container..."
 
-          scp -i key.pem -o StrictHostKeyChecking=no \
-            build/libs/moa-server-0.0.1-SNAPSHOT.jar \
-            cicd@${{ secrets.GCP_BE_DEV_HOST }}:/home/cicd/moa-server-0.0.1-SNAPSHOT.jar || {
-              echo "🚨 Failed to upload JAR!"; exit 1;
+          ssh -i key.pem -o StrictHostKeyChecking=no cicd@${{ secrets.GCP_BE_DEV_HOST }} << 'EOF'
+            echo "🐵 Logging in to GHCR..."
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin || {
+              echo "🚨 GHCR login failed!"; exit 1;
             }
-          echo "✅ JAR uploaded successfully!"
 
           echo "🐵 Writing .env on remote server..."
-          ssh -i key.pem -o StrictHostKeyChecking=no cicd@${{ secrets.GCP_BE_DEV_HOST }} << 'EOF'
             cat <<EENV | sudo tee /home/cicd/moa-backend.env > /dev/null
           SPRING_PROFILES_ACTIVE=${{ secrets.SPRING_PROFILE }}
           SPRING_DATASOURCE_URL=${{ secrets.DB_URL }}
@@ -81,27 +78,26 @@ jobs:
             sudo chmod 600 /home/cicd/moa-backend.env
             sudo chown cicd:cicd /home/cicd/moa-backend.env
             echo "✅ .env file written and secured!"
-          EOF
 
-      - name: 🐵 Restart systemd Service
-        run: |
-          echo "🐵 Restarting Spring Boot systemd service..."
-          ssh -i key.pem -o StrictHostKeyChecking=no cicd@${{ secrets.GCP_BE_DEV_HOST }} << 'EOF'
-            echo "🐵 Running daemon-reload and restarting moa-backend..."
-            sudo systemctl daemon-reload || { echo "🚨 daemon-reload failed!"; exit 1; }
-            sudo systemctl restart moa-backend || { echo "🚨 Failed to restart service!"; exit 1; }
+            echo "🐵 Stopping existing container..."
+            docker stop moa-backend || true
+            docker rm moa-backend || true
 
-            sleep 7
-            echo "✅ Service restarted successfully!"
+            echo "🐵 Pulling latest image..."
+            docker pull ghcr.io/${{ github.repository }}:latest || {
+              echo "🚨 Failed to pull image!"; exit 1;
+            }
 
-            echo "🐵 Checking process..."
-            if ! sudo pgrep -f 'java -jar' > /dev/null; then
-              echo "🚨 Spring Boot process not running!"
-              exit 1
-            fi
+            echo "🐵 Starting new container..."
+            docker run -d --name moa-backend -p 8080:8080 \
+              --env-file /home/cicd/moa-backend.env \
+              --restart unless-stopped \
+              ghcr.io/${{ github.repository }}:latest || {
+                echo "🚨 Failed to start container!"; exit 1;
+              }
 
-            echo "✅ Spring Boot process is running!"
+            echo "✅ Container started!"
 
-            echo "🐵 Tail last 20 lines of server.log:"
-            sudo tail -n 20 /home/cicd/server.log || echo "🚨 Failed to read server.log"
+            echo "🐵 Logs:"
+            docker logs --tail 20 moa-backend || echo "🚨 Failed to fetch logs"
           EOF
