@@ -96,8 +96,8 @@ public class VoteService {
         LocalDateTime utcTime = koreaTime.withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
         VoteValidator.validateClosedAt(utcTime);
 
-        // VoteStatus 결정
-        Vote.VoteStatus status = "local".equals(activeProfile) ? Vote.VoteStatus.OPEN : Vote.VoteStatus.PENDING;
+        // VoteStatus 결정 (prod 환경에서만)
+        Vote.VoteStatus status = "prod".equals(activeProfile) ? Vote.VoteStatus.PENDING : Vote.VoteStatus.OPEN;
 
         // Vote 생성 및 저장
         Vote vote = Vote.createUserVote(
@@ -112,8 +112,8 @@ public class VoteService {
         );
         voteRepository.save(vote);
 
-        // AI 서버로 검열 요청 (로컬 환경 제외)
-        if (!"local".equals(activeProfile)) {
+        // AI 서버로 검열 요청 (prod 환경에서만)
+        if ("prod".equals(activeProfile)) {
             voteModerationService.requestModeration(vote.getId(), vote.getContent());
         }
 
