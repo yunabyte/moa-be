@@ -17,6 +17,10 @@ configurations {
 	compileOnly {
 		extendsFrom annotationProcessor
 	}
+
+	configureEach {
+		exclude group: 'commons-logging', module: 'commons-logging'
+	}
 }
 
 repositories {
@@ -57,6 +61,7 @@ dependencies {
 
 	implementation "org.apache.httpcomponents.client5:httpclient5:5.4.4"
 
+	implementation 'com.navercorp.lucy:lucy-xss:1.6.3'
 }
 
 tasks.named('test') {
