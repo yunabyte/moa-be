@@ -136,6 +136,9 @@ jobs:
           AI_SERVER_URL=${{ secrets.AI_SERVER_URL }}
           KAKAO_CLIENT_ID=${{ secrets.KAKAO_CLIENT_ID }}
           KAKAO_ADMIN_KEY=${{ secrets.KAKAO_ADMIN_KEY }}
+          REDIS_URL=${{ secrets.REDIS_URL }}
+          REDIS_PORT=${{ secrets.REDIS_PORT }}
+          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
           EENV
             fi
 
